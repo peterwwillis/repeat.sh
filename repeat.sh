@@ -34,13 +34,12 @@ _process_lock () {
     done
 }
 _process_cmd () {
-    local lock_content result chksum
+    local result chksum
 
     if [ -n "$logdir" ] ; then
-        lock_content="$BASHPID $0 $*"
-        chksum="$(printf "%s\n" "$lock_content" | md5sum - | awk '{print $1}')"
+        chksum="$(printf "%s\n" "$0 $*" | md5sum - | awk '{print $1}')"
         _process_lock "$chksum"
-        echo "$lock_content" > "$logdir/$chksum.lock"
+        echo "$BASHPID $0 $*" > "$logdir/$chksum.lock"
         echo "" >>"$logdir/$chksum.log"
         _info "running command: $*" >> "$logdir/$chksum.log" 2>&1
         "$@" >>"$logdir/$chksum.log" 2>&1
