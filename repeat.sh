@@ -17,23 +17,27 @@ out_file=/dev/stdout
 _process_lock () {
     local lock_content="$BASHPID $zero $*"
 	local chksum="$(printf "%s\n" "$lock_content" | md5sum - | awk '{print $1}')"
-	while [ -e "$chksum.lock" ] ; do
-		ppid="$(awk '{print $1}' < "$chksum.lock")"
-		cmdname="$(awk '{print $2}' < "$chksum.lock")"
-		if [ ! -d "/proc/$ppid" ] || [ ! "$cmdname" = "$zero" ] ; then
-			echo "ppid '$ppid' gone or cmdname '$cmdname' != '$zero'; lock stale, removing '$chksum.lock'"
-			rm -f "$chksum.lock"
+
+	while [ -e "$logdir/$chksum.lock" ] ; do
+        read -a lock_data < "$logdir/$chksum.lock"
+		ppid="${lock_data[0]}"
+		cmdname="${lock_data[1]}"
+		if ! kill -0 "$ppid" 2>/dev/null || [ ! "$cmdname" = "$zero" ] ; then
+			echo "ppid '$ppid' gone or cmdname '$cmdname' != '$zero'; lock stale, removing '$logdir/$chksum.lock'"
+			rm -f "$logdir/$chksum.lock"
 			continue
 		fi
-		echo "$zero: $BASHPID: Waiting for '$chksum.lock'"
+
+		echo "$zero: $BASHPID: Waiting for '$logdir/$chksum.lock'"
 		if [ "${sleep_wait_lock:-0}" -gt 0 ] ; then
             sleep "$sleep_lock_wait"
         fi
 	done
+
 	echo "$lock_content" > "$logdir/$chksum.lock"
     echo "$zero: $BASHPID: Running command: $*"
 	"$@" >>"$logdir/$chksum.log" 2>&1
-	rm -f "$chksum.lock"
+	rm -f "$logdir/$chksum.lock"
     if [ "${sleep_after_unlock:-0}" -gt 0 ] ; then
         sleep "$sleep_after_unlock"
     fi
