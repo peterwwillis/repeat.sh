@@ -19,46 +19,49 @@ _exittrap () {
 }
 _info () { echo "$(date) $0 $BASHPID: $*" ; }
 _process_lock () {
-    local lock_content="$BASHPID $0 $*"
-    local result chksum
+    local chksum="$1"; shift
+    while [ -e "$logdir/$chksum.lock" ] ; do
+        read -a lock_data < "$logdir/$chksum.lock"
+        ppid="${lock_data[0]}"
+        cmdname="${lock_data[1]}"
+        if ! kill -0 "$ppid" 2>/dev/null || [ ! "$cmdname" = "$0" ] ; then
+            _info "ppid '$ppid' gone or cmdname '$cmdname' != '$0'; lock stale, removing '$logdir/$chksum.lock'"
+            rm -f "$logdir/$chksum.lock"
+            continue
+        fi
+        _info "Waiting for '$logdir/$chksum.lock'"
+        sleep "$sleep_lock_wait"
+    done
+}
+_process_cmd () {
+    local lock_content result chksum
 
     if [ -n "$logdir" ] ; then
+        lock_content="$BASHPID $0 $*"
         chksum="$(printf "%s\n" "$lock_content" | md5sum - | awk '{print $1}')"
-        while [ -e "$logdir/$chksum.lock" ] ; do
-            read -a lock_data < "$logdir/$chksum.lock"
-            ppid="${lock_data[0]}"
-            cmdname="${lock_data[1]}"
-            if ! kill -0 "$ppid" 2>/dev/null || [ ! "$cmdname" = "$0" ] ; then
-                _info "ppid '$ppid' gone or cmdname '$cmdname' != '$0'; lock stale, removing '$logdir/$chksum.lock'"
-                rm -f "$logdir/$chksum.lock"
-                continue
-            fi
-            _info "Waiting for '$logdir/$chksum.lock'"
-            sleep "$sleep_lock_wait"
-        done
+        _process_lock "$chksum"
         echo "$lock_content" > "$logdir/$chksum.lock"
-    fi
-
-    _info "running command: $*"
-    if [ -n "$logdir" ] ; then
+        echo "" >>"$logdir/$chksum.log"
         _info "running command: $*" >> "$logdir/$chksum.log" 2>&1
         "$@" >>"$logdir/$chksum.log" 2>&1
         result=$?
         echo "" >>"$logdir/$chksum.log"
-        rm -f "$logdir/$chksum.lock"
         _info "command '$*' exited with status $result" >> "$logdir/$chksum.log" 2>&1
+        rm -f "$logdir/$chksum.lock"
     else
+        echo ""
+        _info "running command: $*"
         "$@" 2>&1
         result=$?
         echo ""
+        _info "command '$*' exited with status $result"
     fi
-    _info "command '$*' exited with status $result"
 
     sleep "$sleep_after_unlock"
 }
 _process_loop () {
     set +e  # Don't exit if a command fails to run
-	while true ; do _process_lock "$@" ; done
+	while true ; do _process_cmd "$@" ; done
 }
 _process () {
     if [ $background -eq 1 ] ; then
@@ -98,8 +101,8 @@ file as a list  of COMMANDs and ARGS. If '-0' is passed, separates lines by the
 null character.
 
 Options:
+  -w SEC        Seconds to sleep after a command completes and the lock is removed. ($sleep_after_unlock)
   -W SEC        Seconds to sleep in between checking for a lock to be released. ($sleep_lock_wait)
-  -A SEC        Seconds to sleep after a command completes and the lock is removed. ($sleep_after_unlock)
   -f FILE       Read commands from FILE. If '-', reads from standard input.
   -l DIR        Output logs and lock files to DIR.
   -o FILE       Output the loop's warnings/errors to a FILE. ($out_file)
@@ -112,10 +115,10 @@ EOUSAGE
 }
 
 
-while getopts "W:A:f:l:o:0bhv" args ; do
+while getopts "w:W:f:l:o:0bhv" args ; do
     case $args in
+        w)  sleep_after_unlock="$OPTARG" ;;
         W)  sleep_lock_wait="$OPTARG" ;;
-        A)  sleep_after_unlock="$OPTARG" ;;
         f)  read_file="$OPTARG" ;
             if [ "$read_file" = "-" ] ; then
                 read_file="/dev/stdin" ; # bash will emulate /dev/stdin
