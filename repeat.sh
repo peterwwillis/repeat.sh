@@ -6,47 +6,56 @@ set -eu
 [ "${DEBUG:-0}" = "1" ] && set -x
 
 logdir="logs"
-zero="$(readlink -f "$0")"
+zero="$0"
 sleep_lock_wait="1"
 sleep_after_unlock="1"
 background=0
 read_delim=$'\n'
 read_file=
-out_file=/dev/stdout
+out_file='/dev/stdout'
 
+
+_exittrap () {
+    trap - SIGTERM && kill -- -$$
+}
+_info () { echo "$(date) $0 $BASHPID: $*" ; }
 _process_lock () {
-    local lock_content="$BASHPID $zero $*"
+    local lock_content="$BASHPID $0 $*"
 	local chksum="$(printf "%s\n" "$lock_content" | md5sum - | awk '{print $1}')"
+    local result
 
 	while [ -e "$logdir/$chksum.lock" ] ; do
         read -a lock_data < "$logdir/$chksum.lock"
 		ppid="${lock_data[0]}"
 		cmdname="${lock_data[1]}"
-		if ! kill -0 "$ppid" 2>/dev/null || [ ! "$cmdname" = "$zero" ] ; then
-			echo "ppid '$ppid' gone or cmdname '$cmdname' != '$zero'; lock stale, removing '$logdir/$chksum.lock'"
+		if ! kill -0 "$ppid" 2>/dev/null || [ ! "$cmdname" = "$0" ] ; then
+			_info "ppid '$ppid' gone or cmdname '$cmdname' != '$0'; lock stale, removing '$logdir/$chksum.lock'"
 			rm -f "$logdir/$chksum.lock"
 			continue
 		fi
 
-		echo "$zero: $BASHPID: Waiting for '$logdir/$chksum.lock'"
-		if [ "${sleep_wait_lock:-0}" -gt 0 ] ; then
-            sleep "$sleep_lock_wait"
-        fi
+		_info "Waiting for '$logdir/$chksum.lock'"
+        sleep "$sleep_lock_wait"
 	done
 
 	echo "$lock_content" > "$logdir/$chksum.lock"
-    echo "$zero: $BASHPID: Running command: $*"
+    _info "running command: $*"
+    _info "running command: $*" >> "$logdir/$chksum.log" 2>&1
 	"$@" >>"$logdir/$chksum.log" 2>&1
+    result=$?
 	rm -f "$logdir/$chksum.lock"
-    if [ "${sleep_after_unlock:-0}" -gt 0 ] ; then
-        sleep "$sleep_after_unlock"
-    fi
+    _info "command '$*' exited with status $result"
+    _info "command '$*' exited with status $result" >> "$logdir/$chksum.log" 2>&1
+    sleep "$sleep_after_unlock"
 }
 _process_loop () {
     set +e  # Don't exit if a command fails to run
 	while true ; do _process_lock "$@" ; done
 }
 _process () {
+    if [ $background -eq 1 ] ; then
+        out_file='/dev/null'
+    fi
     if [ -n "$read_file" ] ; then
         while IFS= read -r -d "$read_delim" arg ; do
             declare -a args=()
@@ -58,6 +67,7 @@ _process () {
         _process_loop "$@" >"$out_file" 2>&1 &
     fi
     if [ $background -eq 0 ] ; then
+        trap _exittrap SIGINT SIGTERM EXIT
         wait
     fi
 }
