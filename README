@@ -1,0 +1,40 @@
+repeat.sh is a bash script that will run arbitrary commands in a loop.
+
+It is a replacement (or supplement?) for tools like xargs and parallel,
+given a specific set of circumstances:
+
+  - You want to run the same command, over and over and over (for example:
+    load testing)
+
+  - You don't need to limit the number of parallel processes being run.
+
+  - You MAY want:
+
+    - A log file with the output of each command and its return status.
+    - A lock file to determine if a command is still running.
+    - To wait a few seconds before re-running a command.
+    - To keep the commands running in the background indefinitely.
+    - To feed a separate list of arguments to a command, or read
+      commands from a file.
+
+xargs and parallel don't necessarily make all that easy. Those programs are
+designed to run a command once, not loop over it. They also aren't designed
+to run them in the background (though that's easy enough to script around).
+
+ - You can call xargs or parallel from repeat.sh, enabling you to re-run
+   commands once xargs or parallel are done. The downside to this is that
+   repeat.sh will have to wait until the very last command is done running
+   from xargs/parallel before everything is restarted again.
+
+ - You can call repeat.sh from xargs or parallel, which enables you to do things
+   like keep a certain number of commands looping in parallel. But since
+   repeat.sh processes keep repeating forever, that means xargs/parallel will
+   just reach whatever maximum parallel process limit you configured and never
+   run new commands after that.
+
+Other programs you could use instead of the above:
+
+ - 'watch' will re-run a command over and over. You could probably get the 
+   behavior of repeat.sh by scripting 'watch' with bash and xargs, but the
+   complexity would get non-trivial once you tried to add all the other
+   features of this script.
