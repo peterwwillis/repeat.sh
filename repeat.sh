@@ -21,7 +21,8 @@ _exittrap () {
 }
 _log () {
     local output="$1" result="${2:-0}" cmd="${3:-}" logf="$log_file"
-    local log="$(date) $0 $BASHPID: $output"
+    # Use bash's internal printf date conversion rather than shell out to 'date'
+    local log="$(printf "%(%c)T\n" -1) $0 $BASHPID: $output"
     if [ "$quiet" = "1" ] && [ "$result" = "0" ] ; then
         logf="/dev/null"
     fi
