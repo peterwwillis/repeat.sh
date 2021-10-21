@@ -14,8 +14,7 @@ given a specific set of circumstances:
     - A lock file to determine if a command is still running.
     - To wait a few seconds before re-running a command.
     - To keep the commands running in the background indefinitely.
-    - To feed a separate list of arguments to a command, or read
-      commands from a file.
+    - To feed a list of arguments to a command or read commands from a file.
 
 xargs and parallel don't necessarily make all that easy. Those programs are
 designed to run a command once, not loop over it. They also aren't designed
